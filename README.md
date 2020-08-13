@@ -1,0 +1,1 @@
+# Omega2-GarageDoorSensor-MQTT2HA-Daemon
