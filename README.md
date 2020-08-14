@@ -39,7 +39,7 @@ This is the [onion Omega2+](https://onion.io/store/omega2p) mounted on an [Expan
 
 ### Omega2+ Device MQTT Discovery
 
-The Omega2 Garage Door device is reported as:
+The Omega2 Garage Door Sensor device is reported as:
 
 | Name            | Description |
 |-----------------|-------------|
@@ -50,7 +50,7 @@ The Omega2 Garage Door device is reported as:
 
 ### Omega2+ MQTT Topics
 
-The Omega2 Garage Door device exposes a number of topics:
+The Omega2 Garage Door Sensor device exposes a pair of **binary_sensor** topics:
 
 | Name            | Device Class | Units | Description
 |-----------------|-------------|-------------|-------------|
@@ -245,7 +245,7 @@ Thank you to Thomas Dietrich for providing a wonderful pattern for this project.
 > *Omega2+* is a product offered by *Onion Corporation*
 >
 > This project is a community project not for commercial use.
-> The authors will not be held responsible in the event of device failure or simply errant reporting/control of your garage doors, doggie doors or whatever doors you choose to control with this script.
+> The authors will not be held responsible in the event of device failure or simply errant reporting of your garage doors, doggie doors or whatever doors you choose to monitor with this script.
 >
 > This project is in no way affiliated with, authorized, maintained, sponsored or endorsed by *Onion Corporation* or any of its affiliates or subsidiaries.
 
