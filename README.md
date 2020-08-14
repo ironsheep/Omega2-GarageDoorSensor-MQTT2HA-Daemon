@@ -73,7 +73,7 @@ The following example shows the installation below the `/opt` directory:
 
 ```shell
 # make sure we have python3 installed
-opkg install python3 python3-pip pyRelayExp
+opkg install python3 python3-pip
 
 # go to home directory
 cd

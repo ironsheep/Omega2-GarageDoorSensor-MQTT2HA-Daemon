@@ -22,8 +22,9 @@ from configparser import ConfigParser
 from unidecode import unidecode
 import paho.mqtt.client as mqtt
 from signal import signal, SIGPIPE, SIG_DFL
-# and for our Omega2+ hardware
-from OmegaExpansion import relayExp
+# and for our Omega2+ hardware GPIO on Expansion board
+# REF https://docs.onion.io/omega2-docs/gpio-python-module.html
+#  AUGH no GPIO support for Python3  SIGH...
 
 signal(SIGPIPE,SIG_DFL)
 
@@ -78,7 +79,7 @@ def clean_identifier(name):
     clean = unidecode(clean)
     return clean
 
-# Argparse            
+# Argparse
 parser = argparse.ArgumentParser(description=project_name, epilog='For further details see: ' + project_url)
 parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("-d", "--debug", help="show debug output", action="store_true")
@@ -129,7 +130,7 @@ default_right_name = 'right'
 door_name_right = config['Doors'].get('door_2_name', default_right_name).lower()
 
 
-# report our RPi values every 5min 
+# report our RPi values every 5min
 min_interval_in_minutes = 2
 max_interval_in_minutes = 30
 default_interval_in_minutes = 5
@@ -139,7 +140,7 @@ interval_in_minutes = config['Daemon'].getint('interval_in_minutes', default_int
 #
 if (interval_in_minutes < min_interval_in_minutes) or (interval_in_minutes > max_interval_in_minutes):
     print_line('ERROR: Invalid "interval_in_minutes" found in configuration file: "config.ini"! Must be [{}-{}] Fix and try again... Aborting'.format(min_interval_in_minutes, max_interval_in_minutes), error=True)
-    sys.exit(1)    
+    sys.exit(1)
 
 ### Ensure required values within sections of our config are present
 if not config['MQTT']:
@@ -183,7 +184,7 @@ def on_log(client, userdata, level, buf):
 
 
 # -----------------------------------------------------------------------------
-#  RPi variables monitored 
+#  RPi variables monitored
 # -----------------------------------------------------------------------------
 
 dvc_model_raw = ''
@@ -196,6 +197,7 @@ dvc_linux_version = ''
 dvc_uptime_raw = ''
 dvc_uptime = ''
 dvc_mac_raw = ''
+dvc_ip_addr = ''
 dvc_interfaces = []
 dvc_last_update_date = datetime.min
 dvc_filesystem_space_raw = ''
@@ -207,9 +209,7 @@ dvc_firmware_version = ''
 
 # Door State Indications
 door_open_val = 'open'
-door_opening_val = 'opening'
 door_closed_val = 'closed'
-door_closing_val = 'closing'
 
 dvc_door_left_state_indication = door_closed_val    # state: closed --> opening -> open -> closing...
 dvc_door_right_state_indication = door_closed_val   # state: closed --> opening -> open -> closing...
@@ -223,9 +223,9 @@ def getDeviceModel():
     global dvc_model
     global dvc_model_raw
     global dvc_connections
-    out = subprocess.Popen("cat /proc/cpuinfo | grep machine", 
+    out = subprocess.Popen("cat /proc/cpuinfo | grep machine",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_model_raw = stdout.decode('utf-8').lstrip().rstrip()
@@ -250,43 +250,43 @@ def getLinuxRelease():
 
 def getLinuxVersion():
     global dvc_linux_version
-    out = subprocess.Popen("/bin/uname -r", 
+    out = subprocess.Popen("/bin/uname -r",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_linux_version = stdout.decode('utf-8').rstrip()
     print_line('dvc_linux_version=[{}]'.format(dvc_linux_version), debug=True)
-    
+
 def getFirmwareVersion():
     global dvc_firmware_version
-    out = subprocess.Popen("/usr/bin/oupgrade -v | tr -d '>'", 
+    out = subprocess.Popen("/usr/bin/oupgrade -v | tr -d '>'",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     fw_version_raw = stdout.decode('utf-8').rstrip()
     lineParts = fw_version_raw.split(':')
     dvc_firmware_version = lineParts[1].lstrip()
     print_line('dvc_firmware_version=[{}]'.format(dvc_firmware_version), debug=True)
-    
+
 def getProcessorType():
     global dvc_processor_family
-    out = subprocess.Popen("/bin/uname -m", 
+    out = subprocess.Popen("/bin/uname -m",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_processor_family = stdout.decode('utf-8').rstrip()
     print_line('dvc_processor_family=[{}]'.format(dvc_processor_family), debug=True)
-    
+
 def getHostnames():
     global dvc_hostname
     global dvc_fqdn
     #  BUG?! our Omega2 doesn't know our domain name so we append it
-    out = subprocess.Popen("/bin/cat /etc/config/system | /bin/grep host | /usr/bin/awk '{ print $3 }'", 
+    out = subprocess.Popen("/bin/cat /etc/config/system | /bin/grep host | /usr/bin/awk '{ print $3 }'",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_hostname = stdout.decode('utf-8').rstrip().replace("'", '')
@@ -300,9 +300,9 @@ def getHostnames():
 def getUptime():    # RERUN in loop
     global dvc_uptime_raw
     global dvc_uptime
-    out = subprocess.Popen("/usr/bin/uptime", 
+    out = subprocess.Popen("/usr/bin/uptime",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_uptime_raw = stdout.decode('utf-8').rstrip().lstrip()
@@ -320,9 +320,10 @@ def getUptime():    # RERUN in loop
 def getNetworkIFs():    # RERUN in loop
     global dvc_interfaces
     global dvc_mac_raw
-    out = subprocess.Popen('/sbin/ifconfig | egrep "Link|flags|inet|ether" | egrep -v -i "lo:|loopback|inet6|\:\:1|127\.0\.0\.1"', 
+    global dvc_ip_addr
+    out = subprocess.Popen('/sbin/ifconfig | egrep "Link|flags|inet|ether" | egrep -v -i "lo:|loopback|inet6|\:\:1|127\.0\.0\.1"',
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     lines = stdout.decode('utf-8').split("\n")
@@ -334,9 +335,9 @@ def getNetworkIFs():    # RERUN in loop
     #print_line('trimmedLines=[{}]'.format(trimmedLines), debug=True)
     #
     # OLDER SYSTEMS
-    #  eth0      Link encap:Ethernet  HWaddr b8:27:eb:c8:81:f2  
+    #  eth0      Link encap:Ethernet  HWaddr b8:27:eb:c8:81:f2
     #    inet addr:192.168.100.41  Bcast:192.168.100.255  Mask:255.255.255.0
-    #  wlan0     Link encap:Ethernet  HWaddr 00:0f:60:03:e6:dd  
+    #  wlan0     Link encap:Ethernet  HWaddr 00:0f:60:03:e6:dd
     # NEWER SYSTEMS
     #  The following means eth0 (wired is NOT connected, and WiFi is connected)
     #  eth0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
@@ -362,7 +363,7 @@ def getNetworkIFs():    # RERUN in loop
                 imterfc = lineParts[0].replace(':', '')
                 newTuple = (imterfc, 'mac', lineParts[4])
                 if dvc_mac_raw == '':
-                    dvc_mac_raw = lineParts[4]
+                    dvc_mac_raw = newTuple[2]
                 #print_line('newIF=[{}]'.format(imterfc), debug=True)
                 tmpInterfaces.append(newTuple)
                 #print_line('newTuple=[{}]'.format(newTuple), debug=True)
@@ -371,10 +372,14 @@ def getNetworkIFs():    # RERUN in loop
                 if 'ether' in currLine: # NEWER ONLY
                     newTuple = (imterfc, 'mac', lineParts[1])
                     tmpInterfaces.append(newTuple)
+                    if dvc_mac_raw == '':
+                        dvc_mac_raw = newTuple[2]
                     #print_line('newTuple=[{}]'.format(newTuple), debug=True)
                 elif 'inet' in currLine:  # OLDER & NEWER
                     newTuple = (imterfc, 'IP', lineParts[1].replace('addr:',''))
                     tmpInterfaces.append(newTuple)
+                    if dvc_ip_addr == '':
+                        dvc_ip_addr = newTuple[2]
                     #print_line('newTuple=[{}]'.format(newTuple), debug=True)
 
     dvc_interfaces = tmpInterfaces
@@ -384,9 +389,9 @@ def getFileSystemSpace():    # RERUN in loop
     global dvc_filesystem_space_raw
     global dvc_filesystem_space
     global dvc_filesystem_percent
-    out = subprocess.Popen("/bin/df -m | /bin/grep root", 
+    out = subprocess.Popen("/bin/df -m | /bin/grep root",
             shell=True,
-            stdout=subprocess.PIPE, 
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
     dvc_filesystem_space_raw = stdout.decode('utf-8').rstrip()
@@ -453,7 +458,7 @@ def startAliveTimer():
     global aliveTimer
     global aliveTimerRunningStatus
     stopAliveTimer()
-    aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler) 
+    aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler)
     aliveTimer.start()
     aliveTimerRunningStatus = True
     print_line('- started MQTT timer - every {} seconds'.format(ALIVE_TIMOUT_IN_SECONDS), debug=True)
@@ -470,7 +475,7 @@ def isAliveTimerRunning():
     return aliveTimerRunningStatus
 
 # our ALIVE TIMER
-aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler) 
+aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler)
 # our BOOL tracking state of ALIVE TIMER
 aliveTimerRunningStatus = False
 
@@ -482,7 +487,18 @@ aliveTimerRunningStatus = False
 
 # MQTT connection
 
-base_topic = '{}/cover/{}'.format(base_topic_root, sensor_name.lower())
+mac_basic = dvc_mac_raw.lower().replace(":", "")
+mac_left = mac_basic[:6]
+mac_right = mac_basic[6:]
+print_line('mac lt=[{}], rt=[{}], mac=[{}]'.format(mac_left, mac_right, mac_basic), debug=True)
+uniqID = "Omega2-{}gsen{}".format(mac_left, mac_right)
+
+# our Omega2 Reporter device
+LD_DOOR_LEFT = "garage_door_lt"
+LD_DOOR_RIGHT = "garage_door_rt"
+LDS_PAYLOAD_NAME = "info"
+
+base_topic = '{}/binary_sensor/{}'.format(base_topic_root, sensor_name.lower())
 lwt_topic = '{}/status'.format(base_topic)
 lwt_online_val = 'online'
 lwt_offline_val = 'offline'
@@ -493,14 +509,8 @@ mqtt_client.on_connect = on_connect
 mqtt_client.on_publish = on_publish
 mqtt_client.on_log = on_log
 
-command_topic_left = '{}/{}/set'.format(base_topic, door_name_left)
-
-command_topic_right = '{}/{}/set'.format(base_topic, door_name_right)
-
 state_topic_left = '{}/{}/state'.format(base_topic, door_name_left)
 state_topic_right = '{}/{}/state'.format(base_topic, door_name_right)
-
-
 
 mqtt_client.will_set(lwt_topic, payload=lwt_offline_val, retain=True)
 
@@ -542,19 +552,10 @@ else:
 #  Perform our MQTT Discovery Announcement...
 # -----------------------------------------------------------------------------
 
-mac_basic = dvc_mac_raw.lower().replace(":", "")
-mac_left = mac_basic[:6]
-mac_right = mac_basic[6:]
-print_line('mac lt=[{}], rt=[{}], mac=[{}]'.format(mac_left, mac_right, mac_basic), debug=True)
-uniqID = "Omega2-{}gar{}".format(mac_left, mac_right)
 
-# our Omega2 Reporter device
-LD_DOOR_LEFT = "garage_door_lt"
-LD_DOOR_RIGHT = "garage_door_rt"
-LDS_PAYLOAD_NAME = "info"
 
-# FULL CONFIGURATION STATE TOPIC WITHOUT TILT
-#  https://www.home-assistant.io/integrations/cover.mqtt/#full-configuration-state-topic-without-tilt
+# Binary Sensors - Device Class: garage_door
+#  https://www.home-assistant.io/integrations/binary_sensor.mqtt/
 
 # Publish our MQTT auto discovery
 #  table of key items to publish:
@@ -598,8 +599,8 @@ for [sensor, params] in detectorValues.items():
     payload['~'] = base_topic
 
     # State values
-    payload['stat_clsd'] = door_closed_val
-    payload['stat_open'] = door_open_val
+    payload['pl_on'] = door_open_val
+    payload['pl_off'] = door_closed_val
     payload['stat_t'] = state_topic_rel
     # LWT Values & topic
     payload['pl_avail'] = lwt_online_val
@@ -611,16 +612,20 @@ for [sensor, params] in detectorValues.items():
     payload['val_tpl'] = '{{ value_json.state }}'
     #payload['schema'] = 'json'
     if 'device_ident' in params:
+        connections = OrderedDict()
+        connections['mac'] = dvc_mac_raw
+        connections['IP'] = dvc_ip_addr
         payload['dev'] = {
-                'identifiers' : ["{}".format(uniqID)],
-                'manufacturer' : 'Onion Corporation',
-                'name' : params['device_ident'],
-                'model' : '{}'.format(dvc_model),
-                'sw_version': "v{}".format(dvc_firmware_version)
+            'connections' : connections,
+            'identifiers' : ["{}".format(uniqID)],
+            'manufacturer' : 'Onion Corporation',
+            'name' : params['device_ident'],
+            'model' : '{}'.format(dvc_model),
+            'sw_version': "v{}".format(dvc_firmware_version)
         }
     else:
          payload['dev'] = {
-                'identifiers' : ["{}".format(uniqID)],
+            'identifiers' : ["{}".format(uniqID)],
          }
     mqtt_client.publish(discovery_topic, json.dumps(payload), 1, retain=True)
 
@@ -642,7 +647,7 @@ def startPeriodTimer():
     global endPeriodTimer
     global periodTimeRunningStatus
     stopPeriodTimer()
-    endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler) 
+    endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler)
     endPeriodTimer.start()
     periodTimeRunningStatus = True
     print_line('- started PERIOD timer - every {} seconds'.format(interval_in_minutes * 60.0), debug=True)
@@ -661,7 +666,7 @@ def isPeriodTimerRunning():
 
 
 # our TIMER
-endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler) 
+endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler)
 # our BOOL tracking state of TIMER
 periodTimeRunningStatus = False
 reported_first_time = False
@@ -720,8 +725,8 @@ def getNetworkDictionary():
     global dvc_interfaces
     # TYPICAL:
     # dvc_interfaces=[[
-    #   ('eth0', 'mac', 'b8:27:eb:1a:f3:bc'), 
-    #   ('wlan0', 'IP', '192.168.100.189'), 
+    #   ('eth0', 'mac', 'b8:27:eb:1a:f3:bc'),
+    #   ('wlan0', 'IP', '192.168.100.189'),
     #   ('wlan0', 'mac', 'b8:27:eb:4f:a6:e9')
     # ]]
     networkData = OrderedDict()
@@ -748,12 +753,12 @@ def getNetworkDictionary():
 def publishMonitorData(latestData, topic):
     print_line('Publishing to MQTT topic "{}, Data:{}"'.format(topic, json.dumps(latestData)))
     mqtt_client.publish('{}'.format(topic), json.dumps(latestData), 1, retain=False)
-    sleep(0.5) # some slack for the publish roundtrip and callback function  
+    sleep(0.5) # some slack for the publish roundtrip and callback function
 
 def publishDoorValues(latestData, topic):
     print_line('Publishing to MQTT topic "{}, Data:{}"'.format(topic, json.dumps(latestData)))
     mqtt_client.publish('{}'.format(topic), json.dumps(latestData), 1, retain=False)
-    sleep(0.5) # some slack for the publish roundtrip and callback function  
+    sleep(0.5) # some slack for the publish roundtrip and callback function
 
 def update_values():
     # nothing here yet
@@ -762,7 +767,7 @@ def update_values():
     getLastUpdateDate()
     getNetworkIFs()
 
-    
+
 
 # -----------------------------------------------------------------------------
 
@@ -783,15 +788,10 @@ def handle_interrupt(channel):
         reported_first_time = True
     else:
         print_line(sourceID + " >> Time to report! (%s) but SKIPPED (TEST: stall)" % current_timestamp.strftime('%H:%M:%S - %Y/%m/%d'), verbose=True)
-    
+
 def afterMQTTConnect():
     print_line('* afterMQTTConnect()', verbose=True)
     #  NOTE: this is run after MQTT connects
-
-    print_line('* SUBSCRIBE to [{}]'.format(command_topic_left), verbose=True)
-    mqtt_client.subscribe(command_topic_left)
-    print_line('* SUBSCRIBE to [{}]'.format(command_topic_right), verbose=True)
-    mqtt_client.subscribe(command_topic_right)
 
     # start our interval timer
     startPeriodTimer()
@@ -810,7 +810,7 @@ try:
     while True:
         #  our INTERVAL timer does the work
         sleep(10000)
-        
+
 finally:
     # cleanup used pins... just because we like cleaning up after us
     stopPeriodTimer()   # don't leave our timers running!

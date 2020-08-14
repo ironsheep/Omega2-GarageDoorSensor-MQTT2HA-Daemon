@@ -10,8 +10,8 @@ USE_PROCD=1
 
 
 # Daemon name, where is the actual executable
-DAEMON_DIR=/opt/Omega2-GarageDoors-MQTT2HA-Daemon
-DAEMON=$DAEMON_DIR/ISP-GarageDoor-mqtt-daemon.py
+DAEMON_DIR=/opt/Omega2-GarageDoorSensor-MQTT2HA-Daemon
+DAEMON=$DAEMON_DIR/ISP-GarageSensors-mqtt-daemon.py
 
 # Process name ( For display )
 DAEMON_NAME=gardoors-daemon
@@ -35,7 +35,7 @@ EXTRA_HELP="	status  Display run status of $DAEMON_NAME
  
 status () {
         # do the stuff for status
-        RUN_STATE=`ps | grep ISP | egrep -v grep`
+        RUN_STATE=`ps | grep "GarageSensors" | egrep -v grep`
         echo ""
         if [ -n "$RUN_STATE" ]; then
             echo "$DAEMON_NAME: Running"
