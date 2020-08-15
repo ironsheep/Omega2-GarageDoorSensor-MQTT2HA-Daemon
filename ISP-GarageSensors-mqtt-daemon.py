@@ -24,7 +24,7 @@ import paho.mqtt.client as mqtt
 from signal import signal, SIGPIPE, SIG_DFL
 # and for our Omega2+ hardware GPIO on Expansion board
 # REF https://docs.onion.io/omega2-docs/gpio-python-module.html
-#  AUGH no GPIO support for Python3  SIGH...
+import onionGpio
 
 signal(SIGPIPE,SIG_DFL)
 
@@ -718,6 +718,9 @@ def afterMQTTConnect():
 pin_left_door = 4
 pin_right_door = 5
 
+sensorLeftDoor = ''
+sensorRightDoor = ''
+
 def modeI2C():
     #   # omega2-ctrl gpiomux get
     #   Group i2c - [i2c] gpio
@@ -770,76 +773,31 @@ def doorPin(desiredDoor):
         door_pin =  pin_right_door
     return door_pin
 
-def isInputGPIOpin(desiredDoor):
-    #  # fast-gpio get-direction 4
-    #  > Get direction GPIO4: input
-    #
-    door_pin = doorPin(desiredDoor)
-    configCmd = 'fast-gpio get-direction {}'.format(door_pin)
-    out = subprocess.Popen(configCmd,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT)
-    stdout, _ = out.communicate()
-    pins_setdir_raw = stdout.decode('utf-8').lstrip().rstrip().replace('> ','')
-    # now reduce string length (just more compact, same info)
-    lineParts = pins_setdir_raw.split()
-    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
-    # FIXME: UNDONE add validation
-    pinDirectionStatus = False
-    if 'input' in lineParts[3]:
-        pinDirectionStatus = True
-    print_line('pin {} DirectionIsIn=[{}]'.format(door_pin, pinDirectionStatus), debug=True)
-    return pinDirectionStatus
-
-def configureGPIOpin(desiredDoor):
-    if isInputGPIOpin(desiredDoor) == False:
-        door_pin = doorPin(desiredDoor)
-        configCmd = 'gpioctl dirin {}'.format(door_pin)
-        out = subprocess.Popen(configCmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
-        stdout, _ = out.communicate()
-        pins_setdir_raw = stdout.decode('utf-8').lstrip().rstrip()
-        # now reduce string length (just more compact, same info)
-        lineParts = pins_setdir_raw.split()
-        print_line('lineParts=[{}]'.format(lineParts), debug=True)
-        # FIXME: UNDONE add validation
-
-def getStatus(desiredDoor):
+def doorSensor(desiredDoor):
     if desiredDoor == door_name_left:
-        door_state =  getStatus(desiredDoor)
+        door_sensor =  sensorLeftDoor
     else:
-        door_state =  getStatus(desiredDoor)
-    print_line('door_state=[{}]'.format(door_state), debug=True)
-    return door_state
+        door_sensor =  sensorRightDoor
+    return door_sensor
 
 def setUpGPIOSubsystem():
+    global sensorLeftDoor
+    global sensorRightDoor
     # ensure our i2c pins are set for gpio
     needConfigUse = modeI2C()
     if needConfigUse == True:
         setPinsModeGPIO()
     # now set pin directions
-    configureGPIOpin(door_name_left)
-    configureGPIOpin(door_name_right)
+    sensorLeftDoor = onionGpio.OnionGpio(doorPin(door_name_left))
+    sensorLeftDoor.setInputDirection()
+    sensorRightDoor = onionGpio.OnionGpio(doorPin(door_name_right))
+    sensorRightDoor.setInputDirection()
 
 def readDoorStatus(desiredDoor):
+    door_sensor = doorSensor(desiredDoor)
     door_pin = doorPin(desiredDoor)
-    readCmd = 'fast-gpio read {}'.format(door_pin)
-    out = subprocess.Popen(readCmd,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT)
-    stdout, _ = out.communicate()
-    pins_read_raw = stdout.decode('utf-8').lstrip().rstrip().replace('> ','')
-    # now reduce string length (just more compact, same info)
-    lineParts = pins_read_raw.split()
-    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
-    pin_value = '{val?}'
-    if len(lineParts) == 3:
-        pin_value = lineParts[2]
-    door_status = '{unk?}'
+    pin_value = door_sensor.getValue().rstrip()
+    door_status = '{unkown}'
     if pin_value == '0':
         door_status = door_closed_val
     elif pin_value == '1':
@@ -869,4 +827,3 @@ finally:
     # cleanup used pins... just because we like cleaning up after us
     stopPeriodTimer()   # don't leave our timers running!
     stopAliveTimer()
-
