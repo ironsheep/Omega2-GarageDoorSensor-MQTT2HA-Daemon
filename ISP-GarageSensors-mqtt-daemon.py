@@ -211,8 +211,10 @@ dvc_firmware_version = ''
 door_open_val = 'open'
 door_closed_val = 'closed'
 
-dvc_door_left_state_indication = door_closed_val    # state: closed --> opening -> open -> closing...
-dvc_door_right_state_indication = door_closed_val   # state: closed --> opening -> open -> closing...
+dvc_door_left_state = door_closed_val    # state: closed --> opening -> open -> closing...
+dvc_door_right_state = door_closed_val   # state: closed --> opening -> open -> closing...
+dvc_door_prior_left_state = ''
+dvc_door_prior_right_state = ''
 
 
 
@@ -224,10 +226,10 @@ def getDeviceModel():
     global dvc_model_raw
     global dvc_connections
     out = subprocess.Popen("cat /proc/cpuinfo | grep machine",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
     dvc_model_raw = stdout.decode('utf-8').lstrip().rstrip()
     # now reduce string length (just more compact, same info)
     lineParts = dvc_model_raw.split(':')
@@ -243,28 +245,13 @@ def getDeviceModel():
     print_line('dvc_model=[{}]'.format(dvc_model), debug=True)
     print_line('dvc_connections=[{}]'.format(dvc_connections), debug=True)
 
-def getLinuxRelease():
-    global dvc_linux_release
-    dvc_linux_release = 'openWrt'
-    print_line('dvc_linux_release=[{}]'.format(dvc_linux_release), debug=True)
-
-def getLinuxVersion():
-    global dvc_linux_version
-    out = subprocess.Popen("/bin/uname -r",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
-    dvc_linux_version = stdout.decode('utf-8').rstrip()
-    print_line('dvc_linux_version=[{}]'.format(dvc_linux_version), debug=True)
-
 def getFirmwareVersion():
     global dvc_firmware_version
     out = subprocess.Popen("/usr/bin/oupgrade -v | tr -d '>'",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
     fw_version_raw = stdout.decode('utf-8').rstrip()
     lineParts = fw_version_raw.split(':')
     dvc_firmware_version = lineParts[1].lstrip()
@@ -273,10 +260,10 @@ def getFirmwareVersion():
 def getProcessorType():
     global dvc_processor_family
     out = subprocess.Popen("/bin/uname -m",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
     dvc_processor_family = stdout.decode('utf-8').rstrip()
     print_line('dvc_processor_family=[{}]'.format(dvc_processor_family), debug=True)
 
@@ -285,10 +272,10 @@ def getHostnames():
     global dvc_fqdn
     #  BUG?! our Omega2 doesn't know our domain name so we append it
     out = subprocess.Popen("/bin/cat /etc/config/system | /bin/grep host | /usr/bin/awk '{ print $3 }'",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
     dvc_hostname = stdout.decode('utf-8').rstrip().replace("'", '')
     print_line('dvc_hostname=[{}]'.format(dvc_hostname), debug=True)
     if len(fallback_domain) > 0:
@@ -297,35 +284,15 @@ def getHostnames():
         dvc_fqdn = dvc_hostname
     print_line('dvc_fqdn=[{}]'.format(dvc_fqdn), debug=True)
 
-def getUptime():    # RERUN in loop
-    global dvc_uptime_raw
-    global dvc_uptime
-    out = subprocess.Popen("/usr/bin/uptime",
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
-    dvc_uptime_raw = stdout.decode('utf-8').rstrip().lstrip()
-    print_line('dvc_uptime_raw=[{}]'.format(dvc_uptime_raw), debug=True)
-    basicParts = dvc_uptime_raw.split()
-    timeStamp = basicParts[0]
-    lineParts = dvc_uptime_raw.split(',')
-    if('user' in lineParts[1]):
-        dvc_uptime_raw = lineParts[0]
-    else:
-        dvc_uptime_raw = '{}, {}'.format(lineParts[0], lineParts[1])
-    dvc_uptime = dvc_uptime_raw.replace(timeStamp, '').lstrip().replace('up ', '')
-    print_line('dvc_uptime=[{}]'.format(dvc_uptime), debug=True)
-
 def getNetworkIFs():    # RERUN in loop
     global dvc_interfaces
     global dvc_mac_raw
     global dvc_ip_addr
     out = subprocess.Popen('/sbin/ifconfig | egrep "Link|flags|inet|ether" | egrep -v -i "lo:|loopback|inet6|\:\:1|127\.0\.0\.1"',
-           shell=True,
-           stdout=subprocess.PIPE,
-           stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
     lines = stdout.decode('utf-8').split("\n")
     trimmedLines = []
     for currLine in lines:
@@ -385,57 +352,12 @@ def getNetworkIFs():    # RERUN in loop
     dvc_interfaces = tmpInterfaces
     print_line('dvc_interfaces=[{}]'.format(dvc_interfaces), debug=True)
 
-def getFileSystemSpace():    # RERUN in loop
-    global dvc_filesystem_space_raw
-    global dvc_filesystem_space
-    global dvc_filesystem_percent
-    out = subprocess.Popen("/bin/df -m | /bin/grep root",
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
-    dvc_filesystem_space_raw = stdout.decode('utf-8').rstrip()
-    print_line('dvc_filesystem_space_raw=[{}]'.format(dvc_filesystem_space_raw), debug=True)
-    lineParts = dvc_filesystem_space_raw.split()
-    print_line('lineParts=[{}]'.format(lineParts), debug=True)
-    filesystem_1GBlocks = int(lineParts[1],10) / 1024
-    if filesystem_1GBlocks > 32:
-        dvc_filesystem_space = '64GB'
-    elif filesystem_1GBlocks > 16:
-        dvc_filesystem_space = '32GB'
-    elif filesystem_1GBlocks > 8:
-        dvc_filesystem_space = '16GB'
-    elif filesystem_1GBlocks > 4:
-        dvc_filesystem_space = '8GB'
-    elif filesystem_1GBlocks > 2:
-        dvc_filesystem_space = '4GB'
-    elif filesystem_1GBlocks > 1:
-        dvc_filesystem_space = '2GB'
-    else:
-        dvc_filesystem_space = '1GB'
-    print_line('dvc_filesystem_space=[{}]'.format(dvc_filesystem_space), debug=True)
-    dvc_filesystem_percent = lineParts[4].replace('%', '')
-    print_line('dvc_filesystem_percent=[{}]'.format(dvc_filesystem_percent), debug=True)
-
-def getLastUpdateDate():    # RERUN in loop
-    global dvc_last_update_date
-    apt_log_filespec = '/var/opkg-lists/omega2_base.sig'
-    try:
-        mtime = os.path.getmtime(apt_log_filespec)
-    except OSError:
-        mtime = 0
-    last_modified_date = datetime.fromtimestamp(mtime, tz=local_tz)
-    dvc_last_update_date  = last_modified_date
-    print_line('dvc_last_update_date=[{}]'.format(dvc_last_update_date), debug=True)
 
 # get model so we can use it too in MQTT
 getDeviceModel()
 getFirmwareVersion()
 # get our hostnames so we can setup MQTT
 getHostnames()
-getLastUpdateDate()
-getLinuxRelease()
-getLinuxVersion()
 getNetworkIFs()
 getProcessorType()
 
@@ -624,9 +546,9 @@ for [sensor, params] in detectorValues.items():
             'sw_version': "v{}".format(dvc_firmware_version)
         }
     else:
-         payload['dev'] = {
+        payload['dev'] = {
             'identifiers' : ["{}".format(uniqID)],
-         }
+        }
     mqtt_client.publish(discovery_topic, json.dumps(payload), 1, retain=True)
 
     # remove connections as test:                  'connections' : [["mac", mac.lower()], [interface, ipaddr]],
@@ -636,21 +558,33 @@ for [sensor, params] in detectorValues.items():
 # -----------------------------------------------------------------------------
 
 TIMER_INTERRUPT = (-1)
-TEST_INTERRUPT = (-2)
+REPORT_INTERRUPT = (-2)
+TEST_INTERRUPT = (-3)
+
+interval_counter = 0    # this is incremented until our reporting period is reached, then restarted
+sensor_poll_time_in_minutes = 0.25
+counter_wrap_count = (1 / sensor_poll_time_in_minutes) * interval_in_minutes
 
 def periodTimeoutHandler():
+    global interval_counter
     print_line('- PERIOD TIMER INTERRUPT -', debug=True)
-    handle_interrupt(TIMER_INTERRUPT) # '0' means we have a timer interrupt!!!
+    interval_counter += 1
+    channel = TIMER_INTERRUPT
+    if interval_counter >= counter_wrap_count:
+        interval_counter = 0
+        channel = REPORT_INTERRUPT
+    handle_interrupt(channel) #  channel desc
     startPeriodTimer()
 
 def startPeriodTimer():
     global endPeriodTimer
     global periodTimeRunningStatus
     stopPeriodTimer()
-    endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler)
+    # we have forced both-door reporting every interval_in_minutes but this TIMER fires every minute
+    endPeriodTimer = threading.Timer(sensor_poll_time_in_minutes * 60.0, periodTimeoutHandler)
     endPeriodTimer.start()
     periodTimeRunningStatus = True
-    print_line('- started PERIOD timer - every {} seconds'.format(interval_in_minutes * 60.0), debug=True)
+    print_line('- started PERIOD timer - every {} seconds'.format(sensor_poll_time_in_minutes * 60.0), debug=True)
 
 def stopPeriodTimer():
     global endPeriodTimer
@@ -684,42 +618,13 @@ SCRIPT_REPORT_INTERVAL = "report_interval"
 
 DOOR_STATE = "state"
 
-def send_status(timestamp, nothing):
 
-    omegaData = OrderedDict()
-    omegaData[SCRIPT_TIMESTAMP] = timestamp.astimezone().replace(microsecond=0).isoformat()
-    omegaData[GARAGE_DOOR_1] = dvc_model
-    omegaData[GARAGE_DOOR_1] = dvc_connections
+def send_door_status(timestamp, state_value, topic):
+    doorStatusData = OrderedDict()
+    doorStatusData[DOOR_STATE] = state_value
+    doorStatusData[SCRIPT_TIMESTAMP] = timestamp.astimezone().replace(microsecond=0).isoformat()
 
-    if dvc_last_update_date != datetime.min:
-        omegaData[OMEGA_LAST_UPDATE] = dvc_last_update_date.astimezone().replace(microsecond=0).isoformat()
-    else:
-        omegaData[OMEGA_LAST_UPDATE] = ''
-
-    omegaData[OMEGA_NET_CONFIG] = getNetworkDictionary()
-
-    omegaData[OMEGA_SCRIPT] = dvc_mqtt_script.replace('.py', '')
-    omegaData[SCRIPT_REPORT_INTERVAL] = interval_in_minutes
-
-    omegaTopDict = OrderedDict()
-    omegaTopDict[LDS_PAYLOAD_NAME] = omegaData
-
-    _thread.start_new_thread(publishMonitorData, (omegaTopDict, state_topic_right))
-
-def send_door_status(timestamp, topic):
-    global dvc_door_right_state_indication
-    global dvc_door_left_state_indication
-    omegaData = OrderedDict()
-
-    if door_name_left in topic:
-        state_value =  dvc_door_left_state_indication
-    else:
-        state_value =  dvc_door_right_state_indication
-
-    omegaData[DOOR_STATE] = state_value
-    omegaData[SCRIPT_TIMESTAMP] = timestamp.astimezone().replace(microsecond=0).isoformat()
-
-    _thread.start_new_thread(publishDoorValues, (omegaData, topic))
+    _thread.start_new_thread(publishDoorValues, (doorStatusData, topic))
 
 def getNetworkDictionary():
     global dvc_interfaces
@@ -760,32 +665,39 @@ def publishDoorValues(latestData, topic):
     mqtt_client.publish('{}'.format(topic), json.dumps(latestData), 1, retain=False)
     sleep(0.5) # some slack for the publish roundtrip and callback function
 
-def update_values():
-    # nothing here yet
-    getUptime()
-    #getFileSystemSpace()
-    getLastUpdateDate()
-    getNetworkIFs()
-
-
 
 # -----------------------------------------------------------------------------
 
 # Interrupt handler
 def handle_interrupt(channel):
     global reported_first_time
+    global dvc_door_prior_left_state
+    global dvc_door_prior_right_state
     sourceID = "<< INTR(" + str(channel) + ")"
     current_timestamp = datetime.now(local_tz)
     print_line(sourceID + " >> Time to report! (%s)" % current_timestamp.strftime('%H:%M:%S - %Y/%m/%d'), verbose=True)
     # ----------------------------------
     # have PERIOD interrupt!
-    update_values()
+    updateDoorStatus()
+
+    full_report = False
+    if channel == REPORT_INTERRUPT:
+        full_report = True
 
     if (opt_stall == False or reported_first_time == False and opt_stall == True):
-        # ok, report our new detection to MQTT
-        _thread.start_new_thread(send_door_status, (current_timestamp, state_topic_left))
-        _thread.start_new_thread(send_door_status, (current_timestamp, state_topic_right))
-        reported_first_time = True
+        # ok, report our new state to MQTT
+
+        # if left is new state, report it
+        if full_report == True or dvc_door_prior_left_state == '' or dvc_door_prior_left_state != dvc_door_left_state:
+            _thread.start_new_thread(send_door_status, (current_timestamp, dvc_door_left_state, state_topic_left))
+            dvc_door_prior_left_state = dvc_door_left_state
+            reported_first_time = True
+
+        # if right is new state, report it
+        if full_report == True or dvc_door_prior_right_state == '' or dvc_door_prior_right_state != dvc_door_right_state:
+            _thread.start_new_thread(send_door_status, (current_timestamp, dvc_door_right_state, state_topic_right))
+            dvc_door_prior_right_state = dvc_door_right_state
+            reported_first_time = True
     else:
         print_line(sourceID + " >> Time to report! (%s) but SKIPPED (TEST: stall)" % current_timestamp.strftime('%H:%M:%S - %Y/%m/%d'), verbose=True)
 
@@ -796,14 +708,158 @@ def afterMQTTConnect():
     # start our interval timer
     startPeriodTimer()
     # do our first report
-    handle_interrupt(0)
+    handle_interrupt(REPORT_INTERRUPT)
 
-# TESTING AGAIN
+# -----------------------------------------------------------------------------
+# GPIO Methods
+#
+#   Pins Wired:  I2C port retasked as GPIO
+#                 - SCL -> GPIO (4) - left door
+#                 - SDA -> GPIO (5) - right door
+# -----------------------------------------------------------------------------
+pin_left_door = 4
+pin_right_door = 5
 
+def modeI2C():
+    #   # omega2-ctrl gpiomux get
+    #   Group i2c - [i2c] gpio
+    #   Group uart0 - [uart] gpio
+    #   Group uart1 - [uart] gpio pwm01
+    #   Group uart2 - [uart] gpio pwm23
+    #   Group pwm0 - pwm [gpio]
+    #   Group pwm1 - pwm [gpio]
+    #   Group refclk - refclk [gpio]
+    #   Group spi_s - spi_s [gpio] pwm01_uart2
+    #   Group spi_cs1 - [spi_cs1] gpio refclk
+    #   Group i2s - i2s [gpio] pcm
+    #   Group ephy - ephy [gpio]
+    #   Group wled - wled [gpio]
+    #
+    out = subprocess.Popen("omega2-ctrl gpiomux get 2>&1 | grep -i i2c",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    pins_setup_raw = stdout.decode('utf-8').lstrip().rstrip()
+    # now reduce string length (just more compact, same info)
+    lineParts = pins_setup_raw.split()
+    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
+    configureNeededStatus = False
+    if '[i2c]' in pins_setup_raw:
+        configureNeededStatus = True
+    print_line('configureNeededStatus=[{}]'.format(configureNeededStatus), debug=True)
+    return configureNeededStatus
+
+def setPinsModeGPIO():
+    #  # omega2-ctrl gpiomux get 2>&1 | grep i2c
+    #  Group i2c - [i2c] gpio
+    #
+    out = subprocess.Popen("omega2-ctrl gpiomux set i2c gpio",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    pins_setup_raw = stdout.decode('utf-8').lstrip().rstrip()
+    # now reduce string length (just more compact, same info)
+    lineParts = pins_setup_raw.split()
+    print_line('lineParts=[{}]'.format(lineParts), debug=True)
+    # FIXME: UNDONE add validation
+
+def doorPin(desiredDoor):
+    if desiredDoor == door_name_left:
+        door_pin =  pin_left_door
+    else:
+        door_pin =  pin_right_door
+    return door_pin
+
+def isInputGPIOpin(desiredDoor):
+    #  # fast-gpio get-direction 4
+    #  > Get direction GPIO4: input
+    #
+    door_pin = doorPin(desiredDoor)
+    configCmd = 'fast-gpio get-direction {}'.format(door_pin)
+    out = subprocess.Popen(configCmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    pins_setdir_raw = stdout.decode('utf-8').lstrip().rstrip().replace('> ','')
+    # now reduce string length (just more compact, same info)
+    lineParts = pins_setdir_raw.split()
+    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
+    # FIXME: UNDONE add validation
+    pinDirectionStatus = False
+    if 'input' in lineParts[3]:
+        pinDirectionStatus = True
+    print_line('pin {} DirectionIsIn=[{}]'.format(door_pin, pinDirectionStatus), debug=True)
+    return pinDirectionStatus
+
+def configureGPIOpin(desiredDoor):
+    if isInputGPIOpin(desiredDoor) == False:
+        door_pin = doorPin(desiredDoor)
+        configCmd = 'gpioctl dirin {}'.format(door_pin)
+        out = subprocess.Popen(configCmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        stdout, _ = out.communicate()
+        pins_setdir_raw = stdout.decode('utf-8').lstrip().rstrip()
+        # now reduce string length (just more compact, same info)
+        lineParts = pins_setdir_raw.split()
+        print_line('lineParts=[{}]'.format(lineParts), debug=True)
+        # FIXME: UNDONE add validation
+
+def getStatus(desiredDoor):
+    if desiredDoor == door_name_left:
+        door_state =  getStatus(desiredDoor)
+    else:
+        door_state =  getStatus(desiredDoor)
+    print_line('door_state=[{}]'.format(door_state), debug=True)
+    return door_state
+
+def setUpGPIOSubsystem():
+    # ensure our i2c pins are set for gpio
+    needConfigUse = modeI2C()
+    if needConfigUse == True:
+        setPinsModeGPIO()
+    # now set pin directions
+    configureGPIOpin(door_name_left)
+    configureGPIOpin(door_name_right)
+
+def readDoorStatus(desiredDoor):
+    door_pin = doorPin(desiredDoor)
+    readCmd = 'fast-gpio read {}'.format(door_pin)
+    out = subprocess.Popen(readCmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    pins_read_raw = stdout.decode('utf-8').lstrip().rstrip().replace('> ','')
+    # now reduce string length (just more compact, same info)
+    lineParts = pins_read_raw.split()
+    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
+    pin_value = '{val?}'
+    if len(lineParts) == 3:
+        pin_value = lineParts[2]
+    door_status = '{unk?}'
+    if pin_value == '0':
+        door_status = door_closed_val
+    elif pin_value == '1':
+        door_status = door_open_val
+    print_line('pin {} value=[{}], door_status=[{}]'.format(door_pin, pin_value, door_status), debug=True)
+    return door_status
+
+def updateDoorStatus():
+    global dvc_door_left_state
+    global dvc_door_right_state
+    dvc_door_left_state = readDoorStatus(door_name_left)
+    dvc_door_right_state = readDoorStatus(door_name_right)
 
 # TESTING, early abort
 
-afterMQTTConnect()  # now instead of after?
+
+setUpGPIOSubsystem()    # init sensor pins
+afterMQTTConnect()      # now instead of after?
 
 # now just hang in forever loop until script is stopped externally
 try:
