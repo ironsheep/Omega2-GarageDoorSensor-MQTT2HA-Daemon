@@ -28,7 +28,7 @@ from signal import signal, SIGPIPE, SIG_DFL
 
 signal(SIGPIPE,SIG_DFL)
 
-script_version = "0.0.1"
+script_version = "1.0.0"
 script_name = 'ISP-GarageSensors-mqtt-daemon.py'
 script_info = '{} v{}'.format(script_name, script_version)
 project_name = 'Omega2 GarageDoorSensor MQTT2HA Daemon'
@@ -482,8 +482,8 @@ else:
 # Publish our MQTT auto discovery
 #  table of key items to publish:
 detectorValues = OrderedDict([
-    (LD_DOOR_LEFT, dict(title="GarageDr Left", subtopic=door_name_left, sensor_type="binary_sensor", device_class='garage_door', icon='mdi:garage', no_title_prefix="yes", device_ident='Garage Door Sensor')),
-    (LD_DOOR_RIGHT, dict(title="GarageDr Right", subtopic=door_name_right, sensor_type="binary_sensor", device_class='garage_door', icon='mdi:garage', no_title_prefix="yes")),
+    (LD_DOOR_LEFT, dict(title="GarageDr Left", subtopic=door_name_left, sensor_type="binary_sensor", device_class='garage_door', no_title_prefix="yes", device_ident='Garage Door Sensor')),
+    (LD_DOOR_RIGHT, dict(title="GarageDr Right", subtopic=door_name_right, sensor_type="binary_sensor", device_class='garage_door', no_title_prefix="yes")),
 ])
 
 print_line('Announcing Omega2 Monitoring device to MQTT broker for auto-discovery ...')
@@ -534,11 +534,9 @@ for [sensor, params] in detectorValues.items():
     payload['val_tpl'] = '{{ value_json.state }}'
     #payload['schema'] = 'json'
     if 'device_ident' in params:
-        connections = OrderedDict()
-        connections['mac'] = dvc_mac_raw
-        connections['IP'] = dvc_ip_addr
+
         payload['dev'] = {
-            'connections' : connections,
+            'connections' : [[ "ip", dvc_ip_addr ], [ "mac", dvc_mac_raw ]],
             'identifiers' : ["{}".format(uniqID)],
             'manufacturer' : 'Onion Corporation',
             'name' : params['device_ident'],
